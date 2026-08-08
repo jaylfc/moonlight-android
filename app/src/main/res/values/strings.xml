@@ -537,6 +537,8 @@
     <string name="summary_trackpad_swap_axis">On some devices, trackpad input may be rotated in axis. Enabling this option may help.</string>
     <string name="title_checkbox_force_qwerty">Force QWERTY layout</string>
     <string name="summary_checkbox_force_qwerty">Force use QWERTY keyboard layout.\nRequired by GFE.\nTurn off if you want to use a different keyboard layout.</string>
+    <string name="title_titan2_keyboard">Unihertz Titan 2 keyboard support</string>
+    <string name="summary_titan2_keyboard">Optimizations for the Titan 2 physical keyboard (auto-detected): SYM key acts as Ctrl, Alt+key sends the printed symbol instead of an Alt shortcut, and keyboard touch-gesture keys are filtered out.</string>
     <string name="title_checkbox_back_as_meta">Back button as Meta</string>
     <string name="summary_back_as_meta">Send Meta(Win) key on physical back button press.</string>
     <string name="title_back_as_guide">Back button as Guide</string>

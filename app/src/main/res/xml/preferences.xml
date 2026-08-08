@@ -457,6 +457,12 @@
             android:title="@string/title_checkbox_force_qwerty"
             app:iconSpaceReserved="false" />
         <CheckBoxPreference
+            android:defaultValue="true"
+            android:key="checkbox_titan2_keyboard"
+            android:summary="@string/summary_titan2_keyboard"
+            android:title="@string/title_titan2_keyboard"
+            app:iconSpaceReserved="false" />
+        <CheckBoxPreference
             android:defaultValue="false"
             android:key="checkbox_back_as_meta"
             android:summary="@string/summary_back_as_meta"

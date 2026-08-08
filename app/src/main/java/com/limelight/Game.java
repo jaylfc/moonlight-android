@@ -85,6 +85,7 @@ import android.os.PersistableBundle;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.util.Rational;
+import android.util.SparseBooleanArray;
 import android.view.Display;
 import android.view.Gravity;
 import android.view.InputDevice;
@@ -199,6 +200,10 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
     private InputCaptureProvider inputCaptureProvider;
     private int modifierFlags = 0;
+
+    // Unihertz Titan 2 physical keyboard support
+    private boolean titan2KeyboardActive = false;
+    private final SparseBooleanArray titan2AltConsumed = new SparseBooleanArray();
     private boolean grabbedInput = true;
     private boolean cursorVisible = false;
     private boolean isPanZoomMode = false;
@@ -352,6 +357,19 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
         // Read the stream preferences
         prefConfig = PreferenceConfiguration.readPreferences(this);
+
+        // Auto-detect the Unihertz Titan 2 physical keyboard (device name "titan2")
+        if (prefConfig.titan2Keyboard) {
+            for (int id : InputDevice.getDeviceIds()) {
+                InputDevice device = InputDevice.getDevice(id);
+                if (device != null && device.getName() != null &&
+                        device.getName().toLowerCase(java.util.Locale.US).contains("titan2")) {
+                    titan2KeyboardActive = true;
+                    LimeLog.info("Titan 2 keyboard detected, enabling Titan 2 keyboard support");
+                    break;
+                }
+            }
+        }
         tombstonePrefs = Game.this.getSharedPreferences("DecoderTombstone", 0);
 
         if (prefConfig.fullScreen) {
@@ -1406,6 +1424,7 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         // We can't guarantee the state of modifiers keys which may have
         // lifted while focus was not on us. Clear the modifier state.
         this.modifierFlags = 0;
+        this.titan2AltConsumed.clear();
 
         // With Android native pointer capture, capture is lost when focus is lost,
         // so it must be requested again when focus is regained.
@@ -2021,6 +2040,74 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
         return (byte) modifierFlags;
     }
 
+    // Unihertz Titan 2 keyboard handling. Returns Boolean.TRUE/FALSE if the event was
+    // handled (or must be passed through), or null to continue with normal processing.
+    private Boolean handleTitan2Key(KeyEvent event, boolean down) {
+        if (!titan2KeyboardActive) {
+            return null;
+        }
+
+        int keyCode = event.getKeyCode();
+
+        // The Titan 2's capacitive keyboard touch gestures inject phantom KEYCODE 322/404
+        // events from a separate input device. Swallow them so they never reach the host.
+        if (keyCode == 322 || keyCode == 404) {
+            return true;
+        }
+
+        // The SYM key has no useful function while streaming; use it as Left Ctrl so
+        // Titan 2 owners get working Ctrl shortcuts even with Fn set to something else.
+        if (keyCode == KeyEvent.KEYCODE_SYM) {
+            if (handleSpecialKeys(KeyEvent.KEYCODE_CTRL_LEFT, down)) {
+                return true;
+            }
+            if (!grabbedInput) {
+                return false;
+            }
+            if (down && event.getRepeatCount() > 0) {
+                return true;
+            }
+            short translated = keyboardTranslator.translate(KeyEvent.KEYCODE_CTRL_LEFT,
+                    event.getScanCode(), event.getDeviceId());
+            if (translated != 0) {
+                conn.sendKeyboardInput(translated,
+                        down ? KeyboardPacket.KEY_DOWN : KeyboardPacket.KEY_UP,
+                        getModifierState(), MoonBridge.SS_KBE_FLAG_NON_NORMALIZED);
+            }
+            return true;
+        }
+
+        // On the Titan 2, Alt+letter produces the symbol printed on the key (digits and
+        // punctuation) via the event's Unicode char, but the keyCode remains the letter.
+        // Normal processing would send Alt+<letter> as a host shortcut. Send the printed
+        // symbol as UTF-8 text instead.
+        if (down) {
+            if (event.isAltPressed() &&
+                    keyCode >= KeyEvent.KEYCODE_A && keyCode <= KeyEvent.KEYCODE_Z) {
+                int unicodeChar = event.getUnicodeChar();
+                char baseLower = (char) ('a' + (keyCode - KeyEvent.KEYCODE_A));
+                char baseUpper = (char) ('A' + (keyCode - KeyEvent.KEYCODE_A));
+                if ((unicodeChar & KeyCharacterMap.COMBINING_ACCENT) == 0 &&
+                        (unicodeChar & KeyCharacterMap.COMBINING_ACCENT_MASK) != 0 &&
+                        unicodeChar != baseLower && unicodeChar != baseUpper) {
+                    titan2AltConsumed.put(keyCode, true);
+                    conn.sendUtf8Text("" + (char) unicodeChar);
+                    return true;
+                }
+            }
+        }
+        else if (titan2AltConsumed.get(keyCode, false)) {
+            // Consume the matching key up for an Alt-layer symbol we sent as UTF-8.
+            // Once Alt is fully released, forget the key so normal typing resumes.
+            if (!event.isAltPressed()) {
+                titan2AltConsumed.delete(keyCode);
+            }
+            return true;
+        }
+
+        return null;
+    }
+
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         return handleKeyDown(event) || super.onKeyDown(keyCode, event);
@@ -2068,6 +2155,11 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
         // Try the keyboard handler if it wasn't handled as a game controller
         if (!handled) {
+            Boolean titanHandled = handleTitan2Key(event, true);
+            if (titanHandled != null) {
+                return titanHandled;
+            }
+
             // Let this method take duplicate key down events
             if (handleSpecialKeys(event.getKeyCode(), true)) {
                 return true;
@@ -2157,6 +2249,11 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
 
         // Try the keyboard handler if it wasn't handled as a game controller
         if (!handled) {
+            Boolean titanHandled = handleTitan2Key(event, false);
+            if (titanHandled != null) {
+                return titanHandled;
+            }
+
             if (handleSpecialKeys(event.getKeyCode(), false)) {
                 return true;
             }
