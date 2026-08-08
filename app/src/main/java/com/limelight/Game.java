@@ -366,6 +366,8 @@ public class Game extends AppCompatActivity implements SurfaceHolder.Callback,
                         device.getName().toLowerCase(java.util.Locale.US).contains("titan2")) {
                     titan2KeyboardActive = true;
                     LimeLog.info("Titan 2 keyboard detected, enabling Titan 2 keyboard support");
+                    Toast.makeText(this, "Titan 2 keyboard detected: SYM=Ctrl, Alt-layer symbols enabled",
+                            Toast.LENGTH_SHORT).show();
                     break;
                 }
             }
